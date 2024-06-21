@@ -4,7 +4,7 @@ use crate::rust_to_vir::ExternalInfo;
 use crate::util::{err_span, unsupported_err_span};
 use crate::verus_items::{self, BuiltinTypeItem, RustItem, VerusItem};
 use crate::{unsupported_err, unsupported_err_unless};
-use rustc_ast::{ByRef, Mutability};
+use rustc_ast::{BindingMode, ByRef, Mutability};
 use rustc_hir::definitions::DefPath;
 use rustc_hir::{GenericParam, Generics, HirId, QPath, Ty};
 use rustc_infer::infer::TyCtxtInferExt;
@@ -193,10 +193,10 @@ pub(crate) fn qpath_to_ident<'tcx>(
     qpath: &QPath<'tcx>,
 ) -> Option<vir::ast::VarIdent> {
     use rustc_hir::def::Res;
-    use rustc_hir::{BindingAnnotation, Node, Pat, PatKind};
+    use rustc_hir::{Node, Pat, PatKind};
     if let QPath::Resolved(None, rustc_hir::Path { res: Res::Local(id), .. }) = qpath {
         if let Node::Pat(Pat {
-            kind: PatKind::Binding(BindingAnnotation(ByRef::No, Mutability::Not), hir_id, x, None),
+            kind: PatKind::Binding(BindingMode(ByRef::No, Mutability::Not), hir_id, x, None),
             ..
         }) = tcx.hir_node(*id)
         {

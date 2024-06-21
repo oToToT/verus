@@ -5,13 +5,10 @@ use crate::rust_to_vir_expr::{get_adt_res_struct_enum, get_adt_res_struct_enum_u
 use crate::verus_items::{BuiltinTypeItem, RustItem, VerusItem, VerusItems};
 use crate::{lifetime_ast::*, verus_items};
 use air::ast_util::str_ident;
-use rustc_ast::{BorrowKind, IsAuto, Mutability};
+use rustc_ast::{BindingMode, BorrowKind, IsAuto, Mutability};
 use rustc_hir::def::{CtorKind, DefKind, Res};
 use rustc_hir::{
-    AssocItemKind, BindingAnnotation, Block, BlockCheckMode, BodyId, Closure, Crate, Expr,
-    ExprKind, FnSig, HirId, Impl, ImplItem, ImplItemKind, ItemKind, Let, MaybeOwner, Node,
-    OpaqueTy, OpaqueTyOrigin, OwnerNode, Pat, PatKind, Stmt, StmtKind, TraitFn, TraitItem,
-    TraitItemKind, TraitItemRef, UnOp, Unsafety,
+    AssocItemKind, Block, BlockCheckMode, BodyId, Closure, Crate, Expr, ExprKind, FnSig, HirId, Impl, ImplItem, ImplItemKind, ItemKind, LetExpr, MaybeOwner, Node, OpaqueTy, OpaqueTyOrigin, OwnerNode, Pat, PatKind, Stmt, StmtKind, TraitFn, TraitItem, TraitItemKind, TraitItemRef, UnOp, Unsafety
 };
 use rustc_middle::ty::{
     AdtDef, BoundRegionKind, BoundVariableKind, ClauseKind, Const, GenericArgKind,
@@ -621,7 +618,7 @@ fn erase_pat<'tcx>(ctxt: &Context<'tcx>, state: &mut State, pat: &Pat<'tcx>) -> 
                 mk_pat(PatternX::Wildcard)
             } else {
                 let id = state.local(&x.to_string(), hir_id.local_id.index());
-                let BindingAnnotation(_, mutability) = ann;
+                let BindingMode(_, mutability) = ann;
                 mk_pat(PatternX::Binding(id, mutability.to_owned(), None))
             }
         }
@@ -630,7 +627,7 @@ fn erase_pat<'tcx>(ctxt: &Context<'tcx>, state: &mut State, pat: &Pat<'tcx>) -> 
                 erase_pat(ctxt, state, subpat)
             } else {
                 let id = state.local(&x.to_string(), hir_id.local_id.index());
-                let BindingAnnotation(_, mutability) = ann;
+                let BindingMode(_, mutability) = ann;
                 let subpat = erase_pat(ctxt, state, subpat);
                 mk_pat(PatternX::Binding(id, mutability.to_owned(), Some(subpat)))
             }
@@ -1045,7 +1042,7 @@ fn erase_match<'tcx>(
     expect_spec: bool,
     expr: &Expr<'tcx>,
     cond: &Expr<'tcx>,
-    arms: Vec<(Option<&Pat<'tcx>>, &Option<rustc_hir::Guard<'tcx>>, Option<&Expr<'tcx>>)>,
+    arms: Vec<(Option<&Pat<'tcx>>, &Option<&Expr<'tcx>>, Option<&Expr<'tcx>>)>,
 ) -> Option<Exp> {
     let expr_typ = |state: &mut State| erase_ty(ctxt, state, &ctxt.types().node_type(expr.hir_id));
     let mk_exp1 = |e: ExpX| Box::new((expr.span, e));
@@ -1062,7 +1059,7 @@ fn erase_match<'tcx>(
         };
         let guard = match guard_opt {
             None => None,
-            Some(rustc_hir::Guard::If(guard)) => erase_expr(ctxt, state, cond_spec, guard),
+            Some(Expr::If(guard)) => erase_expr(ctxt, state, cond_spec, guard),
             _ => panic!("unexpected guard"),
         };
         let (body, body_span) = if let Some(b) = body_expr {
@@ -1114,7 +1111,7 @@ fn erase_inv_block<'tcx>(
     let inner_pat = match &inner_pat.kind {
         PatKind::Binding(ann, hir_id, x, None) => {
             let id = state.local(&x.to_string(), hir_id.local_id.index());
-            let BindingAnnotation(_, mutability) = ann;
+            let BindingMode(_, mutability) = ann;
             Box::new((inner_pat.span, PatternX::Binding(id, mutability.to_owned(), None)))
         }
         _ => {
@@ -1469,7 +1466,7 @@ fn erase_expr<'tcx>(
             let cond_spec = ctxt.condition_modes[&expr.hir_id] == Mode::Spec;
             let cond = cond.peel_drop_temps();
             match cond.kind {
-                ExprKind::Let(Let { pat, init: src_expr, .. }) => {
+                ExprKind::Let(LetExpr { pat, init: src_expr, .. }) => {
                     let arm1 = (Some(pat.to_owned()), &None, Some(*lhs));
                     let arm2 = (None, &None, *rhs);
                     erase_match(ctxt, state, expect_spec, expr, src_expr, vec![arm1, arm2])
@@ -1986,7 +1983,7 @@ fn erase_fn_common<'tcx>(
                 .iter()
                 .map(|p| {
                     let is_mut_var = match p.pat.kind {
-                        PatKind::Binding(rustc_hir::BindingAnnotation(_, mutability), _, _, _) => {
+                        PatKind::Binding(BindingMode(_, mutability), _, _, _) => {
                             mutability == rustc_hir::Mutability::Mut
                         }
                         _ => panic!("expected binding pattern"),
