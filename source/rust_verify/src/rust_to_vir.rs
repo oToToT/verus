@@ -731,6 +731,7 @@ fn check_item<'tcx>(
             origin: OpaqueTyOrigin::AsyncFn(_),
             in_trait: _,
             lifetime_mapping: _,
+            precise_capturing_args: None,
         }) => {
             return Ok(());
         }

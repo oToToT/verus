@@ -603,6 +603,8 @@ pub(crate) fn pattern_to_vir_inner<'tcx>(
         PatKind::Ref(..) => unsupported_err!(pat.span, "ref patterns", pat),
         PatKind::Slice(..) => unsupported_err!(pat.span, "slice patterns", pat),
         PatKind::Never => unsupported_err!(pat.span, "never patterns", pat),
+        PatKind::Deref(_) => todo!("TODO(1.79.0)"),
+        PatKind::Err(_) => todo!("TODO(1.79.0)"),
     };
     let pattern = bctx.spanned_typed_new(pat.span, &pat_typ, pattern);
     let mut erasure_info = bctx.ctxt.erasure_info.borrow_mut();
@@ -1127,8 +1129,8 @@ pub(crate) fn expr_to_vir_with_adjustments<'tcx>(
 
             let f = match (ty1.kind(), ty2.kind()) {
                 (
-                    TyKind::RawPtr(rustc_middle::ty::TypeAndMut { ty: t1, mutbl: _ }),
-                    TyKind::RawPtr(rustc_middle::ty::TypeAndMut { ty: t2, mutbl: _ }),
+                    TyKind::RawPtr(t1, _),
+                    TyKind::RawPtr(t2, _),
                 ) => {
                     match (t1.kind(), t2.kind()) {
                         (TyKind::Array(el_ty1, _const_len), TyKind::Slice(el_ty2)) => {
@@ -1495,7 +1497,7 @@ pub(crate) fn expr_to_vir_innermost<'tcx>(
                                     tcx.lang_items().fn_once_trait().unwrap(),
                                     [generic_arg0, generic_arg1],
                                 ),
-                                polarity: ImplPolarity::Positive,
+                                polarity: rustc_middle::ty::PredicatePolarity::Positive,
                             }))
                             .to_predicate(tcx);
                         let impl_paths = get_impl_paths_for_clauses(
@@ -1600,7 +1602,7 @@ pub(crate) fn expr_to_vir_innermost<'tcx>(
                 mk_expr(ExprX::Const(c))
             }
             LitKind::Int(i, _) => {
-                mk_lit_int(false, i, typ_of_node(bctx, expr.span, &expr.hir_id, false)?)
+                mk_lit_int(false, i.get(), typ_of_node(bctx, expr.span, &expr.hir_id, false)?)
             }
             LitKind::Char(c) => {
                 let c = vir::ast::Constant::Char(c);
@@ -1694,7 +1696,7 @@ pub(crate) fn expr_to_vir_innermost<'tcx>(
                 let zero = mk_expr(ExprX::Const(zero_const))?;
                 let varg =
                     if let ExprKind::Lit(Spanned { node: LitKind::Int(i, _), .. }) = &arg.kind {
-                        mk_lit_int(true, *i, typ_of_node(bctx, expr.span, &expr.hir_id, false)?)?
+                        mk_lit_int(true, i.get(), typ_of_node(bctx, expr.span, &expr.hir_id, false)?)?
                     } else {
                         expr_to_vir(bctx, arg, modifier)?
                     };
@@ -1807,7 +1809,7 @@ pub(crate) fn expr_to_vir_innermost<'tcx>(
                         if bctx.in_ghost { AutospecUsage::IfMarked } else { AutospecUsage::Final };
                     mk_expr(ExprX::ConstVar(Arc::new(fun), autospec_usage))
                 }
-                Res::Def(DefKind::Static(Mutability::Not), id) => {
+                Res::Def(DefKind::Static { mutability: Mutability::Not, nested: false }, id) => {
                     let path = def_id_to_vir_path(tcx, &bctx.ctxt.verus_items, id);
                     let fun = FunX { path };
                     mk_expr(ExprX::StaticVar(Arc::new(fun)))
@@ -1924,7 +1926,6 @@ pub(crate) fn expr_to_vir_innermost<'tcx>(
             let cond = cond.peel_drop_temps();
             match cond.kind {
                 ExprKind::Let(LetExpr {
-                    hir_id: _,
                     pat,
                     init: expr,
                     ty: _,
@@ -1977,8 +1978,11 @@ pub(crate) fn expr_to_vir_innermost<'tcx>(
                 let pattern = pattern_to_vir(bctx, &arm.pat)?;
                 let guard = match &arm.guard {
                     None => mk_expr(ExprX::Const(Constant::Bool(true)))?,
-                    Some(Guard::If(guard)) => expr_to_vir(bctx, guard, modifier)?,
-                    Some(Guard::IfLet(_)) => unsupported_err!(expr.span, "Guard IfLet"),
+                    Some(expr) => match &expr.kind {
+                        // TODO(1.79.0) ExprKind::If(guard, _, _) => expr_to_vir(bctx, guard, modifier)?,
+                        // TODO(1.79.0) ExprKind::IfLet(_) => unsupported_err!(expr.span, "Guard IfLet"),
+                        _ => todo!("TODO(1.79.0): {:?}", expr)
+                    }
                 };
                 let body = expr_to_vir(bctx, &arm.body, modifier)?;
                 let vir_arm = ArmX { pattern, guard, body };
