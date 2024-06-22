@@ -24,7 +24,7 @@ use air::ast_util::str_ident;
 use rustc_ast::{Attribute, BindingMode, BorrowKind, ByRef, LitKind, Mutability};
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::{
-    BinOpKind, Block, Closure, Destination, Expr, ExprKind, HirId, LetExpr, LoopSource, Node, Pat, PatKind, QPath, Stmt, StmtKind, UnOp
+    BinOpKind, Block, Closure, Destination, Expr, ExprKind, HirId, LetExpr, LetStmt, LoopSource, Node, Pat, PatKind, QPath, Stmt, StmtKind, UnOp
 };
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AutoBorrow, AutoBorrowMutability, PointerCoercion,
@@ -2313,9 +2313,11 @@ fn expr_assign_to_vir_innermost<'tcx>(
                     panic!("assignment to non-local");
                 };
                 if not_mut {
-                    match bctx.ctxt.tcx.hir().get_parent(*id) {
+                    let mut parent = bctx.ctxt.tcx.hir().parent_iter(*id);
+                    let (_, parent) = parent.next().expect("TODO(1.79.0)");
+                    match parent {
                         Node::Param(_) => err_span(lhs.span, "cannot assign to non-mut parameter")?,
-                        Node::Local(_) => (),
+                        // TODO(1.79.0) Node::Local(_) => (),
                         other => unsupported_err!(lhs.span, "assignee node", other),
                     }
                 }
@@ -2524,6 +2526,7 @@ pub(crate) fn stmt_to_vir<'tcx>(
                 unsupported_err!(stmt.span, "internal item statements", stmt)
             }
         }
+        StmtKind::Let(LetStmt { pat, ty, init, els, hir_id, span, source }) => todo!("TODO(1.79.0)"),
     }
 }
 
@@ -2673,8 +2676,8 @@ fn is_ptr_cast<'tcx>(
     // Mutability can always be ignored
     match (src.kind(), dst.kind()) {
         (
-            TyKind::RawPtr(rustc_middle::ty::TypeAndMut { ty: ty1, mutbl: _ }),
-            TyKind::RawPtr(rustc_middle::ty::TypeAndMut { ty: ty2, mutbl: _ }),
+            TyKind::RawPtr(ty1, _),
+            TyKind::RawPtr(ty2, _),
         ) => {
             if ty1 == ty2 {
                 return Ok(Some(PtrCastKind::Trivial));
