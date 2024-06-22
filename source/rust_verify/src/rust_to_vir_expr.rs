@@ -2507,9 +2507,9 @@ pub(crate) fn stmt_to_vir<'tcx>(
             let vir_expr = expr_to_vir(bctx, expr, ExprModifier::REGULAR)?;
             Ok(vec![bctx.spanned_new(expr.span, StmtX::Expr(vir_expr))])
         }
-        StmtKind::Local(Local { pat, init, .. }) => {
-            let_stmt_to_vir(bctx, pat, init, bctx.ctxt.tcx.hir().attrs(stmt.hir_id))
-        }
+        // TODO(1.79.0) StmtKind::Local(Local { pat, init, .. }) => {
+        // TODO(1.79.0)     let_stmt_to_vir(bctx, pat, init, bctx.ctxt.tcx.hir().attrs(stmt.hir_id))
+        // TODO(1.79.0) }
         StmtKind::Item(item_id) => {
             let attrs = bctx.ctxt.tcx.hir().attrs(item_id.hir_id());
             let vattrs = bctx.ctxt.get_verifier_attrs(attrs)?;

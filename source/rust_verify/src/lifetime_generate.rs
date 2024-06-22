@@ -454,7 +454,7 @@ fn erase_ty<'tcx>(ctxt: &Context<'tcx>, state: &mut State, ty: &Ty<'tcx>) -> Typ
         TyKind::Tuple(_) => Box::new(TypX::Tuple(
             ty.tuple_fields().iter().map(|t| erase_ty(ctxt, state, &t)).collect(),
         )),
-        TyKind::RawPtr(rustc_middle::ty::TypeAndMut { ty: t, mutbl }) => {
+        TyKind::RawPtr(t, mutbl) => {
             let ty = erase_ty(ctxt, state, t);
             Box::new(TypX::RawPtr(ty, *mutbl))
         }
@@ -1059,7 +1059,7 @@ fn erase_match<'tcx>(
         };
         let guard = match guard_opt {
             None => None,
-            Some(Expr::If(guard)) => erase_expr(ctxt, state, cond_spec, guard),
+            Some(guard) if matches!(&guard.kind, ExprKind::If(..)) => erase_expr(ctxt, state, cond_spec, guard),
             _ => panic!("unexpected guard"),
         };
         let (body, body_span) = if let Some(b) = body_expr {
@@ -1533,7 +1533,6 @@ fn erase_expr<'tcx>(
         ExprKind::Closure(Closure {
             capture_clause: capture_by,
             body: body_id,
-            movability,
             ..
         }) => {
             let mut params: Vec<(Span, Id, Typ)> = Vec::new();
@@ -1553,7 +1552,7 @@ fn erase_expr<'tcx>(
             }
             let body_exp = erase_expr(ctxt, state, expect_spec, &body.value);
             let body_exp = force_block(body_exp, body.value.span);
-            mk_exp(ExpX::Closure(*capture_by, *movability, params, body_exp))
+            mk_exp(ExpX::Closure(*capture_by, params, body_exp))
         }
         ExprKind::Block(block, None) => {
             let attrs = ctxt.tcx.hir().attrs(expr.hir_id);
